@@ -1,0 +1,326 @@
+class zge_util_bi definition.
+  public section.
+*   Execution modes
+    constants: begin of ac_execution_mode,
+                display    type bdc_mode value 'A',
+                error      type bdc_mode value 'E',
+                background type bdc_mode value 'N',
+               end of ac_execution_mode.
+
+*   Update modes
+    constants: begin of ac_update_mode,
+                synchronous  type ctu_update value 'S',
+                asynchronous type ctu_update value 'A',
+                local        type ctu_update value 'L',
+               end of ac_update_mode.
+
+*   Catt modes
+    constants: begin of ac_catt_mode,
+                no_catt        type ctu_params-cattmode value space,
+                catt_no_single type ctu_params-cattmode value 'N',
+                catt_single    type ctu_params-cattmode value 'A',
+               end of ac_catt_mode.
+
+*   Dynpro action codes
+    constants: ac_bdc_okcode type bdcdata-fval value 'BDC_OKCODE'.
+
+    data: at_messtab type tab_bdcmsgcoll read-only.
+
+    methods:
+      constructor
+        importing
+          iv_transaction    type bdc_tcode
+          iv_sequence_field type xfeld               default space
+          iv_execution_mode type bdc_mode            default ac_execution_mode-background
+          iv_update_mode    type ctu_update          default ac_update_mode-synchronous
+          iv_cattmode       type ctu_params-cattmode default ac_catt_mode-no_catt
+          iv_defsize        type ctu_params-defsize  default space
+          iv_racommit       type ctu_params-racommit default space
+          iv_nobinpt        type ctu_params-nobinpt  default space
+          iv_nobiend        type ctu_params-nobiend  default space,
+     "Add new dynpro to BI steps
+      add_dynpro
+        importing
+          iv_dynpro  type bdcdata-dynpro
+          iv_program type bdcdata-program
+          iv_okcode  type bdcdata-fval optional,
+      "Add ok code to BI dynpro
+      add_ok_code
+        importing
+          iv_okcode  type bdcdata-fval,
+      "Add new field to BI dynpro steps
+      add_field
+        importing
+          iv_name     type bdcdata-fnam
+          iv_value    type any
+          iv_condense type xfeld optional,
+      "Call BI transaction
+      call_transaction,
+      "Create BI session
+      open_session
+        importing
+          iv_name type apq_grpn
+          iv_user type sy-uname default sy-uname
+          iv_keep type apq_qdel default space,
+      "Insert transacction to BI session
+      insert_transaction,
+      "Close BI session
+      close_session.
+
+  private section.
+
+    types: begin of lty_st_sequence_field,
+            name    type bdcdata-fnam,
+            pos(2)  type n,
+           end of lty_st_sequence_field.
+
+    data: at_bdcdata        type bdcdata_tab,
+          at_sequence_field type standard table of lty_st_sequence_field.
+
+    data: as_ctu_params type ctu_params.
+
+    data: av_transaction    type bdc_tcode,
+          av_sequence_field type xfeld.
+
+    data: ac_sequence_pattern type string value '\([[:digit:]]{2}\)'.
+
+    methods:
+    "Calculate next sequence position for sequence fields of BI steps
+      calculate_next_sequence
+        importing
+          iv_name type bdcdata-fnam
+        returning
+          value(rv_sequence) type bdcdata-fnam.
+
+endclass.                    "zge_util_bi DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS zge_util_bi IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zge_util_bi implementation.
+
+  method constructor.
+    "BI transaction
+    me->av_transaction        = iv_transaction.
+    "Indicates there are sequence fields in BI steps
+    me->av_sequence_field     = iv_sequence_field.
+
+    "Call transaction options
+    me->as_ctu_params-dismode  = iv_execution_mode.
+    me->as_ctu_params-updmode  = iv_update_mode.
+    me->as_ctu_params-cattmode = iv_cattmode.
+    me->as_ctu_params-defsize  = iv_defsize.
+    me->as_ctu_params-racommit = iv_racommit.
+    me->as_ctu_params-nobinpt  = iv_nobinpt.
+    me->as_ctu_params-nobiend  = iv_nobiend.
+
+  endmethod.                    "constructor
+
+  method add_dynpro.
+    data: ls_bdcdata type bdcdata.
+
+*   Check obligatory params
+    check not iv_program is initial.
+    check not iv_dynpro  is initial.
+
+*   Add step to BI
+    ls_bdcdata-program  = iv_program.
+    ls_bdcdata-dynpro   = iv_dynpro.
+    ls_bdcdata-dynbegin = 'X'.
+
+    append ls_bdcdata to at_bdcdata.
+
+*   Add ok code if supplied
+    if  iv_okcode is supplied.
+      me->add_ok_code( iv_okcode ).
+    endif.
+
+  endmethod.                    "ADD_DYNPRO
+
+  method add_ok_code.
+*   Add ok code to BI
+    me->add_field( iv_name = ac_bdc_okcode iv_value = iv_okcode ).
+  endmethod.                    "add_ok_code
+
+  method add_field.
+    data: ls_bdcdata        type bdcdata.
+
+    data: lv_sequence_name   type bdcdata-fnam.
+
+*   If sequence mode is active, check if its necessary to calculate new sequence
+    if not av_sequence_field is initial.
+      lv_sequence_name = me->calculate_next_sequence( iv_name ).
+    endif.
+
+*   If the field name was replaced take it, otherway take input field name
+    if lv_sequence_name is initial.
+      write iv_name  to ls_bdcdata-fnam.
+    else.
+      write lv_sequence_name  to ls_bdcdata-fnam.
+    endif.
+
+    write iv_value to ls_bdcdata-fval.
+
+    if iv_condense is supplied.
+      condense ls_bdcdata-fval.
+    endif.
+
+    append ls_bdcdata to at_bdcdata.
+
+  endmethod.                    "add_field
+
+  method calculate_next_sequence.
+
+    field-symbols: <ls_sequence_field> type lty_st_sequence_field.
+
+    data: lo_regex   type ref to cl_abap_regex,
+          lo_matcher type ref to cl_abap_matcher.
+
+    data: lv_pattern_result  type abap_bool,
+          lv_pattern_replace type char4,
+          lv_offset_match    type i.
+
+    try.
+
+        "Create regex
+        create object lo_regex
+          exporting
+            pattern = ac_sequence_pattern.
+
+        "Create matcher
+        lo_matcher = lo_regex->create_matcher( text = iv_name ).
+
+        "Check if there is a sequence field [A-Z]\([0-9]{2}\)
+        lv_pattern_result = lo_matcher->find_next( ).
+
+        if lv_pattern_result eq abap_true.
+
+          "Check if the field name was previously registered
+          read table at_sequence_field assigning <ls_sequence_field>
+            with key name = iv_name.
+
+          if sy-subrc is initial.
+            "Replace sequence number for the actual one
+            concatenate '(' <ls_sequence_field>-pos  ')' into lv_pattern_replace.
+            lo_matcher->replace_all( lv_pattern_replace ).
+          else.
+            "Get sequence number from field name and register to sequence table
+            lv_offset_match = lo_matcher->get_offset( ) + 1.
+            append initial line to at_sequence_field assigning <ls_sequence_field>.
+            <ls_sequence_field>-name = iv_name.
+            <ls_sequence_field>-pos  = iv_name+lv_offset_match(2).
+
+          endif.
+          "Set next sequence position
+          add 1 to <ls_sequence_field>-pos.
+
+        endif.
+
+        "Get repaced text
+        write lo_matcher->text  to rv_sequence.
+
+      catch cx_sy_matcher .
+*       raise ex_error.
+      catch cx_sy_regex .
+*       raise ex_error.
+    endtry.
+
+  endmethod.                    "calculate_next_sequence
+
+
+  method call_transaction.
+    data: lt_messtab type tab_bdcmsgcoll.
+
+    " Reset messages table
+    refresh at_messtab.
+
+    " Execute transaction
+    call transaction av_transaction using at_bdcdata
+          options from as_ctu_params
+          messages into at_messtab.
+
+    " Check if there was errors in BI
+    if sy-subrc is not initial.
+*      raise ex_error.
+    else.
+      "If there was no errors in BI check messages table
+      lt_messtab[] = at_messtab[].
+
+      delete lt_messtab where msgtyp eq 'S' or msgtyp eq 'I'.
+
+      "if there are any lines, it means there is an error/abort message
+      if lines( lt_messtab ) gt 0.
+*        raise ex_error.
+      endif.
+
+    endif.
+
+    " Clear BI steps
+    refresh at_bdcdata.
+  endmethod.                    "call_transaction
+
+  method open_session.
+    "Open session
+    call function 'BDC_OPEN_GROUP'
+      exporting
+        group               = iv_name
+        keep                = iv_keep
+        user                = iv_user
+      exceptions
+        client_invalid      = 1
+        destination_invalid = 2
+        group_invalid       = 3
+        group_is_locked     = 4
+        holddate_invalid    = 5
+        internal_error      = 6
+        queue_error         = 7
+        running             = 8
+        system_lock_error   = 9
+        user_invalid        = 10
+        others              = 11.
+
+    if not sy-subrc is initial.
+*    raise ex_error.
+    endif.
+
+  endmethod.                    "open_session
+
+  method insert_transaction.
+    "Insert transaction to BI session
+    call function 'BDC_INSERT'
+      exporting
+        tcode            = me->av_transaction
+      tables
+        dynprotab        = me->at_bdcdata
+      exceptions
+        internal_error   = 1
+        not_open         = 2
+        queue_error      = 3
+        tcode_invalid    = 4
+        printing_invalid = 5
+        posting_invalid  = 6
+        others           = 7.
+
+    if not sy-subrc is initial.
+*    raise ex_error.
+    else.
+      refresh: at_bdcdata.
+    endif.
+
+  endmethod.                    "insert_transaction
+
+  method close_session.
+    "Close BI session
+    call function 'BDC_CLOSE_GROUP'
+      exceptions
+        not_open    = 1
+        queue_error = 2
+        others      = 3.
+
+    if not sy-subrc is initial.
+*      raise ex_error.
+    endif.
+  endmethod.                    "close_session
+endclass.                    "zge_util_bi IMPLEMENTATION
