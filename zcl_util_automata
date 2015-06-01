@@ -1,0 +1,170 @@
+*----------------------------------------------------------------------*
+*       CLASS CL_automata DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class cl_automata definition.
+
+  public section.
+    methods:
+     process_state
+      importing
+       code type string,
+    process_state_0
+      importing
+       code type string,
+    process_state_1
+      importing
+       code type string,
+    process_state_2
+      importing
+       code type string,
+    process_state_3
+      importing
+       code type string,
+    process_state_4
+      importing
+       code type string,
+    process_state_5
+      importing
+       code type string.
+
+  private section.
+
+    data: actual_state type n.
+
+    constants: method_prefix type char14 value 'PROCESS_STATE_'.
+
+    methods:
+*     Validate if a code is valid appliying a REGEX
+      validate_code
+        importing
+          code  type string
+          regex type string
+        returning
+          value(valid) type xfeld.
+
+
+endclass.                    "CL_automata DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS CL_automata IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class cl_automata implementation.
+  method validate_code.
+    data: lo_matcher type ref to cl_abap_matcher.
+
+    lo_matcher = cl_abap_matcher=>create(
+       pattern     = regex
+       text        = code
+       ignore_case = abap_true
+     ).
+
+    valid = lo_matcher->match( ).
+
+  endmethod.                    "validate_code
+
+  method process_state.
+    data: next_state type string.
+
+    concatenate method_prefix actual_state into next_state.
+
+    call method (next_state)
+      exporting
+        code = code.
+
+    write actual_state.
+  endmethod.                    "process_state
+
+  method process_state_0.
+    data: lv_matnr_code  type matnr,
+          lv_valid_matnr type xfeld.
+
+    call function 'CONVERSION_EXIT_ALPHA_INPUT'
+      exporting
+        input  = code
+      importing
+        output = lv_matnr_code.
+
+    lv_valid_matnr = me->validate_code( code = code regex = '([A-Z]|[[:digit:]]){1,18}').
+
+    check not lv_valid_matnr is initial.
+
+    select count(*)
+      from mara
+      where matnr eq lv_matnr_code.
+
+    check sy-subrc is initial.
+
+    actual_state = 1.
+
+  endmethod.                    "process_state_0
+
+  method process_state_1.
+
+    data: lv_entry_quantity type erfmg,
+          lv_valid_quantity type xfeld.
+
+    lv_valid_quantity = me->validate_code( code = code regex = '[[:digit:]]{1,7}\.[[:digit:]]{1,3}').
+
+    check not lv_valid_quantity is initial.
+
+    lv_entry_quantity = code.
+
+    check lv_entry_quantity gt 0.
+
+    actual_state = 2.
+
+  endmethod.                    "process_state_1
+
+  method process_state_2.
+
+    data: lv_werks_code  type werks_d,
+          lv_valid_werks type xfeld.
+
+    call function 'CONVERSION_EXIT_ALPHA_INPUT'
+      exporting
+        input  = code
+      importing
+        output = lv_werks_code.
+
+    lv_valid_werks = me->validate_code( code = code regex = '[[:digit:]]{4}').
+
+    check not lv_valid_werks is initial.
+
+    select count(*)
+      from t001w
+      where werks eq lv_werks_code.
+
+    check sy-subrc is initial.
+
+    actual_state = 3.
+  endmethod.                    "process_state_2
+
+  method process_state_3.
+
+    case code.
+      when 'MOVE'.
+        process_state_4( code ).
+      when 'EM'.
+        process_state_5( code ).
+      when others.
+        write 'Goods movement not allowed'.
+    endcase.
+
+
+  endmethod.                    "process_state_3
+
+  method process_state_4.
+    write 'Material document created for MOVE movement'.
+    actual_state = 0.
+  endmethod.                    "process_state_4
+
+  method process_state_5.
+    write 'Material document created for EM movement'.
+    actual_state = 0.
+  endmethod.                    "process_state_5
+
+endclass.                    "CL_automata IMPLEMENTATION
