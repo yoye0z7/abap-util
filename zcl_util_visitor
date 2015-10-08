@@ -1,0 +1,273 @@
+class: zcl_ge_util_print_cell  definition deferred,
+       zcl_ge_util_print_row   definition deferred,
+       zcl_ge_util_print_table definition deferred.
+*----------------------------------------------------------------------*
+*       INTERFACE zif_ge_util_printer
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+interface zif_ge_util_printer.
+  methods:
+    print_cell
+      importing
+        io_cell type ref to zcl_ge_util_print_cell,
+    print_row
+      importing
+        io_row type ref to zcl_ge_util_print_row,
+    print_table
+      importing
+        io_table type ref to zcl_ge_util_print_table,
+    flush.
+endinterface.                    "zif_ge_util_printer
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print definition abstract.
+  public section.
+    methods : print abstract
+                importing
+                  io_printer type ref to zif_ge_util_printer.
+endclass.                    "zcl_ge_util_print DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_cell DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_cell definition  inheriting from
+zcl_ge_util_print.
+  public section.
+    types: gty_t_cell type standard table of ref to
+zcl_ge_util_print_cell.
+
+    methods:
+      constructor
+        importing
+          iv_contenido type string,
+      print redefinition,
+      get_contenido
+        returning value(rv_contenido) type string.
+
+  private section.
+    data: av_contenido type string.
+
+endclass.                    "zcl_ge_util_print_cell DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_cell IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_cell implementation.
+  method constructor.
+    super->constructor( ).
+    av_contenido = iv_contenido.
+  endmethod.                    "constructor
+
+  method print.
+    io_printer->print_cell( me ).
+  endmethod.                    "print
+
+  method get_contenido.
+    rv_contenido = me->av_contenido.
+  endmethod.                    "get_contenido
+endclass.                    "zcl_ge_util_print_cell IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_row DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_row definition inheriting from
+zcl_ge_util_print.
+  public section.
+    types: gty_t_row type standard table of ref to
+zcl_ge_util_print_row.
+
+    methods:
+      constructor
+        importing
+          it_cell type zcl_ge_util_print_cell=>gty_t_cell,
+      print redefinition,
+      get_cells
+        exporting
+          et_cell type zcl_ge_util_print_cell=>gty_t_cell.
+
+  private section.
+    data: at_cell type standard table of ref to zcl_ge_util_print_cell.
+endclass.                    "zcl_ge_util_print_row DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_row IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_row implementation.
+  method constructor.
+    super->constructor( ).
+    me->at_cell[] = it_cell[].
+  endmethod.                    "constructor
+
+  method print.
+    io_printer->print_row( me ).
+  endmethod.                    "print
+
+  method get_cells.
+    et_cell[] = me->at_cell.
+  endmethod.                    "get_cells
+endclass.                    "zcl_ge_util_print_row IMPLEMENTATION
+
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_table DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_table definition inheriting from
+zcl_ge_util_print.
+  public section.
+    methods:
+      constructor
+        importing
+          it_row type zcl_ge_util_print_row=>gty_t_row,
+      print redefinition,
+      get_rows
+        exporting
+          et_row type zcl_ge_util_print_row=>gty_t_row.
+
+  private section.
+    data: at_row type standard table of ref to zcl_ge_util_print_row.
+
+endclass.                    "zcl_ge_util_print_table DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_print_table IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_print_table implementation.
+  method constructor.
+    super->constructor( ).
+    me->at_row[] = it_row[].
+  endmethod.                    "constructor
+
+  method print.
+    io_printer->print_table( me ).
+  endmethod.                    "print
+
+  method get_rows.
+    et_row[] = me->at_row.
+  endmethod.                    "get_cells
+endclass.                    "zcl_ge_util_print_table IMPLEMENTATION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_printer_HTML DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_printer_html definition .
+  public section.
+    interfaces: zif_ge_util_printer.
+
+    aliases: print_cell  for zif_ge_util_printer~print_cell,
+             print_row   for zif_ge_util_printer~print_row,
+             print_table for zif_ge_util_printer~print_table,
+             flush       for zif_ge_util_printer~flush.
+
+  private section.
+    data: at_html type string.
+
+endclass.                    "zcl_ge_util_printer_HTML DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS zcl_ge_util_printer_html IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_ge_util_printer_html implementation.
+
+  method print_cell.
+    data: contenido type string.
+
+    contenido = io_cell->get_contenido( ).
+    concatenate  at_html '<celda>' contenido '</celda>' into at_html
+separated by space.
+
+  endmethod.                    "print_cell
+
+  method print_row.
+
+    data: lt_cell type zcl_ge_util_print_cell=>gty_t_cell.
+
+    data: lo_cell type ref to zcl_ge_util_print_cell.
+
+    io_row->get_cells( importing et_cell = lt_cell ).
+
+    concatenate at_html '<fila>'  into at_html separated by space.
+    loop at  lt_cell into lo_cell.
+      lo_cell->print( me ).
+    endloop.
+
+    concatenate at_html '</fila>'  into at_html separated by space.
+  endmethod.                    "print_row
+
+  method print_table.
+
+    data: lt_row type zcl_ge_util_print_row=>gty_t_row.
+
+    data: lo_row type ref to zcl_ge_util_print_row.
+
+    io_table->get_rows( importing et_row = lt_row ).
+
+    concatenate at_html '<tabla>'  into at_html separated by space.
+    loop at  lt_row into lo_row.
+      lo_row->print( me ).
+    endloop.
+
+    concatenate at_html '</tabla>'  into at_html separated by space.
+
+  endmethod.                    "print_table
+
+
+  method flush.
+    write at_html.
+  endmethod.                    "flush
+endclass.                    "zcl_ge_util_printer_html IMPLEMENTATION
+
+
+start-of-selection.
+
+  data: lt_cell type zcl_ge_util_print_cell=>gty_t_cell,
+        lt_row  type zcl_ge_util_print_row=>gty_t_row.
+
+  data: lo_cell  type ref to zcl_ge_util_print_cell,
+        lo_row   type ref to zcl_ge_util_print_row,
+        lo_table type ref to zcl_ge_util_print_table,
+        lo_printer type  ref to zcl_ge_util_printer_html..
+
+  create object lo_cell
+    exporting
+      iv_contenido = 'contenido'.
+
+  do 5 times.
+    append lo_cell to lt_cell.
+  enddo.
+
+
+  create object lo_row
+    exporting
+      it_cell = lt_cell.
+
+  do 5 times.
+    append lo_row to lt_row.
+  enddo.
+
+  create object lo_table
+    exporting
+      it_row = lt_row.
+
+  create object lo_printer.
+
+  lo_table->print( lo_printer ).
+  lo_printer->flush( ).
