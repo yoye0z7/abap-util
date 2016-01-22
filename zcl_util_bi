@@ -65,7 +65,12 @@ class zge_util_bi definition.
       "Insert transacction to BI session
       insert_transaction,
       "Close BI session
-      close_session.
+      close_session,
+      "Execute BI session
+      execute_session
+        importing
+          iv_uname     type sy-uname default sy-uname
+          iv_session   type d0100-mapn.
 
   private section.
 
@@ -323,4 +328,9 @@ class zge_util_bi implementation.
 *      raise ex_error.
     endif.
   endmethod.                    "close_session
+  
+  method execute_session.
+     submit rsbdcsub user iv_uname
+        with mappe eq iv_session exporting list to memory and return.
+  endmethod.                    "execute_session  
 endclass.                    "zge_util_bi IMPLEMENTATION
